@@ -1216,6 +1216,17 @@ public class JedisCluster extends BinaryJedisCluster implements JedisCommands,
       }
     }.run(key);
   }
+  
+//  @Override
+  public ScanResult<Entry<String, String>> hscan(final String key, final String cursor, final ScanParams scanParams) {
+    return new JedisClusterCommand<ScanResult<Entry<String, String>>>(connectionHandler, timeout,
+        maxRedirections) {
+      @Override
+      public ScanResult<Entry<String, String>> execute(Jedis connection) {
+        return connection.hscan(key, cursor, scanParams);
+      }
+    }.run(key);
+  }
 
   @Override
   public ScanResult<String> sscan(final String key, final String cursor) {
@@ -1226,6 +1237,16 @@ public class JedisCluster extends BinaryJedisCluster implements JedisCommands,
       }
     }.run(key);
   }
+  
+//  @Override
+  public ScanResult<String> sscan(final String key, final String cursor, final ScanParams scanParams) {
+    return new JedisClusterCommand<ScanResult<String>>(connectionHandler, timeout, maxRedirections) {
+      @Override
+      public ScanResult<String> execute(Jedis connection) {
+        return connection.sscan(key, cursor, scanParams);
+      }
+    }.run(key);
+  }
 
   @Override
   public ScanResult<Tuple> zscan(final String key, final String cursor) {
@@ -1233,6 +1254,16 @@ public class JedisCluster extends BinaryJedisCluster implements JedisCommands,
       @Override
       public ScanResult<Tuple> execute(Jedis connection) {
         return connection.zscan(key, cursor);
+      }
+    }.run(key);
+  }
+  
+//  @Override
+  public ScanResult<Tuple> zscan(final String key, final String cursor, final ScanParams scanParams) {
+    return new JedisClusterCommand<ScanResult<Tuple>>(connectionHandler, timeout, maxRedirections) {
+      @Override
+      public ScanResult<Tuple> execute(Jedis connection) {
+        return connection.zscan(key, cursor, scanParams);
       }
     }.run(key);
   }
@@ -1264,7 +1295,7 @@ public class JedisCluster extends BinaryJedisCluster implements JedisCommands,
       public List<String> execute(Jedis connection) {
         return connection.blpop(timeout, key);
       }
-    }.run(null);
+    }.run(key);
   }
 
   @Override
@@ -1274,7 +1305,10 @@ public class JedisCluster extends BinaryJedisCluster implements JedisCommands,
       public List<String> execute(Jedis connection) {
         return connection.brpop(timeout, key);
       }
-    }.run(null);
+    }.run(key);
   }
-
+  
+  public List<JedisPool> getMasterNodes() {
+    return connectionHandler.getMasterNodes();
+  }
 }

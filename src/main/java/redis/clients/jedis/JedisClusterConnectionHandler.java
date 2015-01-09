@@ -1,5 +1,6 @@
 package redis.clients.jedis;
 
+import java.util.List;
 import static redis.clients.jedis.JedisClusterInfoCache.getNodeKey;
 
 import java.util.Map;
@@ -37,6 +38,10 @@ public abstract class JedisClusterConnectionHandler {
 
   public Map<String, JedisPool> getNodes() {
     return cache.getNodes();
+  }
+  
+  public List<JedisPool> getMasterNodes() {
+    return cache.getMasterNodes();
   }
 
   public void assignSlotToNode(int slot, HostAndPort targetNode) {

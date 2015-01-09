@@ -2,6 +2,7 @@ package redis.clients.jedis;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.Lock;
@@ -18,6 +19,7 @@ public class JedisClusterInfoCache {
 
   private Map<String, JedisPool> nodes = new HashMap<String, JedisPool>();
   private Map<Integer, JedisPool> slots = new HashMap<Integer, JedisPool>();
+  private List<JedisPool> masters = new LinkedList<JedisPool>();
 
   private final ReentrantReadWriteLock rwl = new ReentrantReadWriteLock();
   private final Lock r = rwl.readLock();
@@ -34,6 +36,7 @@ public class JedisClusterInfoCache {
     try {
       this.nodes.clear();
       this.slots.clear();
+      this.masters.clear();
 
       String localNodes = jedis.clusterNodes();
       for (String nodeInfo : localNodes.split("\n")) {
@@ -43,6 +46,11 @@ public class JedisClusterInfoCache {
         HostAndPort targetNode = clusterNodeInfo.getNode();
         setNodeIfNotExist(targetNode);
         assignSlotsToNode(clusterNodeInfo.getAvailableSlots(), targetNode);
+        
+        String[] info = nodeInfo.split("\\s+");
+        if (info[2].contains("master")) {
+            masters.add(getNode(getNodeKey(targetNode)));
+        }
       }
     } finally {
       w.unlock();
@@ -156,6 +164,15 @@ public class JedisClusterInfoCache {
     r.lock();
     try {
       return new HashMap<String, JedisPool>(nodes);
+    } finally {
+      r.unlock();
+    }
+  }
+  
+  public List<JedisPool> getMasterNodes() {
+    r.lock();
+    try {
+      return new ArrayList<JedisPool>(masters);
     } finally {
       r.unlock();
     }

@@ -15,6 +15,9 @@ import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.logging.Logger;
+import redis.clients.jedis.ScanParams;
+import redis.clients.jedis.ScanResult;
+import redis.clients.jedis.Tuple;
 
 public class JedisClusterTest extends Assert {
   private static Jedis node1;
@@ -27,6 +30,7 @@ public class JedisClusterTest extends Assert {
   private HostAndPort nodeInfo2 = HostAndPortUtil.getClusterServers().get(1);
   private HostAndPort nodeInfo3 = HostAndPortUtil.getClusterServers().get(2);
   private HostAndPort nodeInfo4 = HostAndPortUtil.getClusterServers().get(3);
+  private JedisCluster jedisCluster;
   protected Logger log = Logger.getLogger(getClass().getName());
 
   @Before
@@ -73,6 +77,10 @@ public class JedisClusterTest extends Assert {
     node3.clusterAddSlots(node3Slots);
 
     JedisClusterTestUtil.waitForClusterReady(node1, node2, node3);
+    
+    Set<HostAndPort> jedisClusterNode = new HashSet<HostAndPort>();
+    jedisClusterNode.add(nodeInfo1);
+    jedisCluster = new JedisCluster(jedisClusterNode);
   }
 
   @AfterClass
@@ -496,5 +504,199 @@ public class JedisClusterTest extends Assert {
     }
     return false;
   }
+  
+  @Test
+  public void testZscan() {
+    jedisCluster.zadd("aSortedSet", 1, "member1");
+    jedisCluster.zadd("aSortedSet", 2, "member2");
+    jedisCluster.zadd("aSortedSet", 3, "notMember");
 
+    ScanResult<Tuple> zscan = jedisCluster.zscan("aSortedSet", "0");
+    assertEquals("Wrong number of total members", 3, zscan.getResult().size());
+
+    ScanParams params = new ScanParams();
+    params.match("member*");
+
+    List<Tuple> totalResult = new ArrayList<Tuple>();
+    String cursor = "0";
+    do {
+      zscan = jedisCluster.zscan("aSortedSet", cursor, params);
+
+      totalResult.addAll(zscan.getResult());
+      cursor = zscan.getCursor();
+    } while (!cursor.equals("0"));
+
+    assertEquals("Wrong number of scanned members", 2, totalResult.size());
+  }
+
+  @Test
+  public void testHscan() {
+    jedisCluster.hset("aHash", "field1", "value1");
+    jedisCluster.hset("aHash", "field2", "value2");
+    jedisCluster.hset("aHash", "otherField", "value3");
+
+    List<Map.Entry<String, String>> totalResult = new ArrayList<Map.Entry<String, String>>();
+    String cursor = "0";
+    do {
+      ScanResult<Map.Entry<String, String>> hscan = jedisCluster.hscan("aHash", "0");
+
+      totalResult.addAll(hscan.getResult());
+      cursor = hscan.getCursor();
+    } while (!cursor.equals("0"));
+    assertEquals("Wrong number of total members", 3, totalResult.size());
+
+    ScanParams params = new ScanParams();
+    params.match("field*");
+
+    totalResult.clear();
+    cursor = "0";
+    do {
+      ScanResult<Map.Entry<String, String>> hscan = jedisCluster.hscan("aHash", cursor, params);
+
+      totalResult.addAll(hscan.getResult());
+      cursor = hscan.getCursor();
+    } while (!cursor.equals("0"));
+
+    assertEquals("Wrong number of scanned fields", 2, totalResult.size());
+  }
+
+  @Test
+  public void testSscan() {
+    jedisCluster.sadd("aSet", "member1");
+    jedisCluster.sadd("aSet", "member2");
+    jedisCluster.sadd("aSet", "notMember");
+
+    ScanResult<String> sscan = jedisCluster.sscan("aSet", "0");
+    assertEquals("Wrong number of total members", 3, sscan.getResult().size());
+
+    ScanParams params = new ScanParams();
+    params.match("member*");
+
+    List<String> totalResult = new ArrayList<String>();
+    String cursor = "0";
+    do {
+      sscan = jedisCluster.sscan("aSet", cursor, params);
+
+      totalResult.addAll(sscan.getResult());
+      cursor = sscan.getCursor();
+    } while (!cursor.equals("0"));
+
+    assertEquals("Wrong number of scanned members", 2, totalResult.size());
+  }
+
+  @Test
+  public void blpop() throws InterruptedException {
+    List<String> result = jedisCluster.blpop(1, "foo");
+    assertNull(result);
+
+    jedisCluster.lpush("foo", "bar");
+    result = jedisCluster.blpop(1, "foo");
+
+    assertNotNull(result);
+    assertEquals(2, result.size());
+    assertEquals("foo", result.get(0));
+    assertEquals("bar", result.get(1));
+
+    // // Binary
+    // final byte[] bfoo = { 0x01, 0x02, 0x03, 0x04 };
+    // final byte[] bbar = { 0x05, 0x06, 0x07, 0x08 };
+    // jedisCluster.lpush(bfoo, bbar);
+    // List<byte[]> bresult = jedisCluster.blpop(1, bfoo);
+    //
+    // assertNotNull(bresult);
+    // assertEquals(2, bresult.size());
+    // assertArrayEquals(bfoo, bresult.get(0));
+    // assertArrayEquals(bbar, bresult.get(1));
+  }
+
+  @Test
+  public void brpop() throws InterruptedException {
+    List<String> result = jedisCluster.brpop(1, "foo");
+    assertNull(result);
+
+    jedisCluster.lpush("foo", "bar");
+    result = jedisCluster.brpop(1, "foo");
+    assertNotNull(result);
+    assertEquals(2, result.size());
+    assertEquals("foo", result.get(0));
+    assertEquals("bar", result.get(1));
+
+    // // Binary
+    // final byte[] bfoo = { 0x01, 0x02, 0x03, 0x04 };
+    // final byte[] bbar = { 0x05, 0x06, 0x07, 0x08 };
+    // jedisCluster.lpush(bfoo, bbar);
+    // List<byte[]> bresult = jedisCluster.brpop(1, bfoo);
+    // assertNotNull(bresult);
+    // assertEquals(2, bresult.size());
+    // assertArrayEquals(bfoo, bresult.get(0));
+    // assertArrayEquals(bbar, bresult.get(1));
+  }
+
+  @Test
+  public void testscan() {
+    jedisCluster.sadd("aSet", "member1");
+    jedisCluster.zadd("aSortedSet", 1, "member2");
+    jedisCluster.hset("aHash", "field", "value");
+
+    ScanResult<String> scan = scan();
+
+    assertEquals("Wrong number of total members", 3, scan.getResult().size());
+
+    ScanParams params = new ScanParams();
+    params.match("*Set*");
+
+    scan = scan(params);
+
+    assertEquals("Wrong number of scanned members", 2, scan.getResult().size());
+  }
+  
+  private ScanResult<String> scan() {
+    return scan(null);
+  }
+
+  private ScanResult<String> scan(final ScanParams params) {
+    ThreadPoolExecutor executor = new ThreadPoolExecutor(1, Runtime.getRuntime()
+        .availableProcessors(), 0, TimeUnit.SECONDS, new ArrayBlockingQueue<Runnable>(
+        jedisCluster.getMasterNodes().size()));
+
+    List<Future<List<String>>> futures = new ArrayList<Future<List<String>>>();
+    for (final JedisPool entry : jedisCluster.getMasterNodes()) {
+      futures.add(executor.submit(new Callable<List<String>>() {
+        @Override
+        public List<String> call() throws Exception {
+          Jedis resource = entry.getResource();
+          try {
+            List<String> result = new ArrayList<String>();
+            String cursor = "0";
+            do {
+              ScanResult<String> scan;
+              if (params == null) {
+                scan = resource.scan(cursor);
+              } else {
+                scan = resource.scan(cursor, params);
+              }
+              result.addAll(scan.getResult());
+              cursor = scan.getCursor();
+            } while (!cursor.equals("0"));
+            return result;
+          } finally {
+            entry.returnResource(resource);
+          }
+        }
+      }));
+    }
+
+    executor.shutdown();
+
+    List<String> result = new ArrayList<String>();
+    for (Future<List<String>> future : futures) {
+      try {
+        result.addAll(future.get());
+      } catch (InterruptedException ex) {
+      } catch (ExecutionException ex) {
+      }
+    }
+
+    return new ScanResult<String>("0", result);
+  }
 }
